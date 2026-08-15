@@ -123,6 +123,6 @@ jobs:
           RECORDS=$(printf '%s\n' "$RECORDS" | sed '/^$/d')
           ledger_put ledger.jsonl "$RECORDS" "claim: $ASSIGN #$SEAT"
 
-          # 8. 안내 답글과 무잔류 정리
-          reply "접수 완료. 좌석은 $ASSIGN #$SEAT 입니다. 저장소 https://github.com/$ORG/$REPO 를 열어 초대를 수락하십시오. 같은 안내가 GitHub 가입 메일로도 발송되었습니다. 이 이슈는 잠시 후 자동 정리됩니다."
+          # 8. 안내 답글과 무잔류 정리 — 결과와 다음 한 걸음만 말한다 (#N 표기는 이슈 링크로 오렌더링되므로 금지)
+          reply "**$ASSIGN ${SEAT}번 좌석으로 접수되었습니다.**"$'\n'"저장소를 열어 **Accept invitation**을 누르십시오 → https://github.com/$ORG/$REPO"
           finish
