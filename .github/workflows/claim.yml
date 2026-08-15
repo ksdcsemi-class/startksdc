@@ -89,7 +89,7 @@ jobs:
           # 3. 중복 검사 - 이미 있으면 생성 없이 초대만 재발송한다 (멱등)
           if gh api "repos/$ORG/$REPO" --silent 2>/dev/null; then
             gh api -X PUT "repos/$ORG/$REPO/collaborators/$AUTHOR" -f permission=push --silent || true
-            reply "이미 접수된 신청입니다. 저장소는 https://github.com/$ORG/$REPO 이며, 초대가 필요하면 다시 발송되었습니다."
+            reply "이미 접수된 신청입니다."$'\n'"**초대를 다시 보냈습니다.**"$'\n'"저장소를 열어 **Accept invitation**을 누르십시오 → https://github.com/$ORG/$REPO"
             finish
           fi
 
