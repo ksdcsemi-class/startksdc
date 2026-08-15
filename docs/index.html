@@ -35,12 +35,11 @@
     <li>아래 <b>파란 입장하기</b>를 누르면 GitHub 신청 화면이 열립니다</li>
   </ol>
   <a class="go" id="go" href="#" hidden>입장하기</a>
-  <p class="after-title">누른 다음에는</p>
+  <p class="after-title">다음 페이지에서는</p>
   <ol class="after" start="3">
-    <li>GitHub 화면에서 <b>초록 Create</b> 버튼을 눌러 신청을 제출합니다</li>
-    <li>잠시 뒤 달리는 안내 답글의 저장소 링크에서 <b>Accept invitation</b>을 누르면 끝입니다</li>
+    <li><b>초록 Create</b> 버튼을 눌러 신청을 제출합니다</li>
   </ol>
-  <p class="hint" id="hint">초대 메일은 GitHub 가입 메일함으로도 발송됩니다.</p>
+  <p class="hint" id="hint" hidden></p>
 </div>
 <script>
   var a = new URLSearchParams(location.search).get("a");
@@ -53,7 +52,9 @@
     go.hidden = false;
   } else {
     document.getElementById("course").className = "course off";
-    document.getElementById("hint").textContent = "수업 QR로 다시 접속하십시오.";
+    var hint = document.getElementById("hint");
+    hint.hidden = false;
+    hint.textContent = "수업 QR로 다시 접속하십시오.";
   }
 </script>
 </body>
