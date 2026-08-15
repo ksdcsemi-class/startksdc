@@ -48,7 +48,7 @@
     document.getElementById("course").textContent = a;
     var go = document.getElementById("go");
     go.href = "https://github.com/ksdcsemi-class/startksdc/issues/new"
-            + "?template=claim.yml&title=" + encodeURIComponent("claim: " + a);
+            + "?template=claim-" + a + ".yml&title=" + encodeURIComponent("claim: " + a);
     go.hidden = false;
   } else {
     document.getElementById("course").className = "course off";
