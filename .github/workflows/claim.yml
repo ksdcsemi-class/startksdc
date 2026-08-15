@@ -2,24 +2,27 @@
 # 배포 위치는 startksdc(공개) .github/workflows/claim.yml이다.
 # 이슈 본문과 제목은 데이터로만 다룬다 (env 경유, 스크립트 보간 금지).
 # 로그 규율: 좌석 번호와 repo 이름 외의 학생 정보를 출력하지 않는다.
+# 구조: process(직렬 — 좌석·장부 경합 차단)와 cleanup(병렬 — 지연 삭제)을 분리한다.
+#   삭제 대기가 직렬 구간을 점유하면 처리량이 1건/5분으로 떨어지기 때문이다 (2026-08-15 실측).
 name: claim
 
 on:
   issues:
     types: [opened]
 
-# 좌석 번호 부여와 ledger 기록의 경합을 직렬화한다
-concurrency:
-  group: claim-engine
-  cancel-in-progress: false
-
 permissions: {}
 
 jobs:
   process:
     runs-on: ubuntu-latest
+    concurrency:
+      group: claim-engine
+      cancel-in-progress: false
+    outputs:
+      node: ${{ steps.claim.outputs.node }}
     steps:
       - name: claim 처리
+        id: claim
         env:
           GH_TOKEN: ${{ secrets.CLASSROOM_OPS_TOKEN }}
           ORG: ${{ github.repository_owner }}
@@ -29,19 +32,15 @@ jobs:
           TITLE: ${{ github.event.issue.title }}
           AUTHOR: ${{ github.event.issue.user.login }}
           NODE: ${{ github.event.issue.node_id }}
-          DELETE_DELAY_SECONDS: "300"
         run: |
           set -euo pipefail
 
           reply() {
             gh api "repos/$ORG/$ENTRY/issues/$NUM/comments" -f body="$1" --silent
           }
-          # 무잔류: 답글 후 지연 삭제한다. 실패해도 워크플로는 성공으로 끝낸다 (예비 도구가 따라잡는다)
+          # 무잔류: 삭제는 cleanup job의 몫이다 — 여기서는 대상만 넘기고 즉시 끝난다
           finish() {
-            sleep "$DELETE_DELAY_SECONDS"
-            gh api graphql \
-              -f query='mutation($id: ID!) { deleteIssue(input: {issueId: $id}) { clientMutationId } }' \
-              -F id="$NODE" --silent || true
+            echo "node=$NODE" >> "$GITHUB_OUTPUT"
             exit 0
           }
           ledger_get() {
@@ -70,7 +69,7 @@ jobs:
           # 1. 제목 검증 - claim이 아닌 이슈도 안내 후 같은 무잔류 경로로 정리한다
           ASSIGN=$(printf '%s' "$TITLE" | sed -n 's/^claim: *\([a-z0-9][a-z0-9-]*\) *$/\1/p')
           if [ -z "$ASSIGN" ]; then
-            reply "이 저장소는 수업 입장 신청 전용입니다. 수업 QR로 다시 접수하십시오. 이 이슈는 잠시 후 자동 정리됩니다."
+            reply "이 저장소는 수업 입장 신청 전용입니다."$'\n'"수업 QR로 다시 접수하십시오."
             finish
           fi
           echo "claim 접수: 제목 형식 통과"
@@ -79,7 +78,7 @@ jobs:
           REGISTRY=$(ledger_get registry.cfg)
           LINE=$(printf '%s\n' "$REGISTRY" | sed -n "s/^$ASSIGN *= *//p" | head -1)
           if [ -z "$LINE" ]; then
-            reply "접수 대상이 아닌 신청입니다. 수업 QR로 다시 접수하십시오. 이 이슈는 잠시 후 자동 정리됩니다."
+            reply "접수 대상이 아닌 신청입니다."$'\n'"수업 QR로 다시 접수하십시오."
             finish
           fi
           TEMPLATE=$(printf '%s' "$LINE" | cut -d, -f1 | tr -d ' ')
@@ -89,7 +88,7 @@ jobs:
           # 3. 중복 검사 - 이미 있으면 생성 없이 초대만 재발송한다 (멱등)
           if gh api "repos/$ORG/$REPO" --silent 2>/dev/null; then
             gh api -X PUT "repos/$ORG/$REPO/collaborators/$AUTHOR" -f permission=push --silent || true
-            reply "이미 접수된 신청입니다."$'\n'"**초대를 다시 보냈습니다.**"$'\n'"저장소를 열어 **Accept invitation**을 누르십시오 → https://github.com/$ORG/$REPO"
+            reply "이미 접수된 신청입니다."$'\n'"**초대를 다시 보냈습니다.**"$'\n'"저장소를 열어 **Accept invitation**을 누르십시오."$'\n'"https://github.com/$ORG/$REPO"
             finish
           fi
 
@@ -97,11 +96,11 @@ jobs:
           RECORDS=$(ledger_get ledger.jsonl)
           COUNT=$(printf '%s\n' "$RECORDS" | grep -c "\"assignment\":\"$ASSIGN\"" || true)
           if [ "${SEATS:-0}" -gt 0 ] && [ "$COUNT" -ge "$SEATS" ]; then
-            reply "정원이 마감된 수업입니다. 담당 교수에게 문의하십시오. 이 이슈는 잠시 후 자동 정리됩니다."
+            reply "정원이 마감된 수업입니다."$'\n'"담당 교수에게 문의하십시오."
             finish
           fi
           SEAT=$((COUNT + 1))
-          echo "좌석 배정: $ASSIGN #$SEAT"
+          echo "좌석 배정: $ASSIGN $SEAT"
 
           # 5. 생성과 초대
           create_and_invite "$TEMPLATE" "$REPO"
@@ -121,8 +120,24 @@ jobs:
           NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           RECORDS="$RECORDS"$'\n'"{\"ts\":\"$NOW\",\"assignment\":\"$ASSIGN\",\"seat\":$SEAT,\"user\":\"$AUTHOR\"}"
           RECORDS=$(printf '%s\n' "$RECORDS" | sed '/^$/d')
-          ledger_put ledger.jsonl "$RECORDS" "claim: $ASSIGN #$SEAT"
+          ledger_put ledger.jsonl "$RECORDS" "claim: $ASSIGN seat $SEAT"
 
-          # 8. 안내 답글과 무잔류 정리 — 결과와 다음 한 걸음만 말한다 (#N 표기는 이슈 링크로 오렌더링되므로 금지)
+          # 8. 안내 답글 - 결과와 다음 한 걸음만 말한다 (#N 표기는 이슈 링크로 오렌더링되므로 금지)
           reply "접수 완료."$'\n'"**$ASSIGN ${SEAT}번 좌석입니다.**"$'\n'"아래의 저장소를 열어 녹색 버튼 **Accept invitation**을 누르십시오."$'\n'"https://github.com/$ORG/$REPO"
           finish
+
+  cleanup:
+    needs: process
+    if: ${{ needs.process.outputs.node != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 지연 삭제 (무잔류)
+        env:
+          GH_TOKEN: ${{ secrets.CLASSROOM_OPS_TOKEN }}
+          NODE: ${{ needs.process.outputs.node }}
+          DELETE_DELAY_SECONDS: "300"
+        run: |
+          sleep "$DELETE_DELAY_SECONDS"
+          gh api graphql \
+            -f query='mutation($id: ID!) { deleteIssue(input: {issueId: $id}) { clientMutationId } }' \
+            -F id="$NODE" --silent || true
