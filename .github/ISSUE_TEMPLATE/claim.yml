@@ -6,13 +6,9 @@ name: 수업 입장 신청
 description: 수업 QR로 들어온 입장 신청입니다
 title: "claim: "
 body:
-  - type: markdown
-    attributes:
-      value: |
-        접수되면 이 화면에 안내 답글이 달리고, GitHub 가입 메일함으로 저장소 초대가 발송됩니다.
   - type: checkboxes
     id: ack
     attributes:
-      label: 바로 아래의 초록 Create 버튼을 누르면 접수됩니다
+      label: 아래 초록 Create 버튼을 누르면 접수됩니다
       options:
-        - label: 확인했습니다 (표시하지 않아도 접수됩니다)
+        - label: 확인 (선택)
