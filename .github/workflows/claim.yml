@@ -83,6 +83,8 @@ jobs:
           fi
           TEMPLATE=$(printf '%s' "$LINE" | cut -d, -f1 | tr -d ' ')
           SEATS=$(printf '%s' "$LINE" | sed -n 's/.*SEATS *\([0-9][0-9]*\).*/\1/p')
+          # HELLO 스위치 - 실습형은 on(기본, 명부 자동 등재), 창구형은 off (과목 repo userinfo로 완결)
+          HELLO=$(printf '%s' "$LINE" | sed -n 's/.*HELLO *\(on\|off\).*/\1/p')
           REPO="$ASSIGN-$AUTHOR"
 
           # 3. 중복 검사 - 이미 있으면 생성 없이 초대만 재발송한다 (멱등)
@@ -105,8 +107,8 @@ jobs:
           # 5. 생성과 초대
           create_and_invite "$TEMPLATE" "$REPO"
 
-          # 6. 명부 자동 등재 - 과목 claim인데 helloksdc 명부가 없으면 함께 만든다
-          if [ "$ASSIGN" != "helloksdc" ] && ! gh api "repos/$ORG/helloksdc-$AUTHOR" --silent 2>/dev/null; then
+          # 6. 명부 자동 등재 - 실습형 과목 claim인데 helloksdc 명부가 없으면 함께 만든다 (HELLO off는 건너뜀)
+          if [ "$ASSIGN" != "helloksdc" ] && [ "$HELLO" != "off" ] && ! gh api "repos/$ORG/helloksdc-$AUTHOR" --silent 2>/dev/null; then
             HELLO_TPL=$(printf '%s\n' "$REGISTRY" | sed -n 's/^helloksdc *= *//p' | head -1 | cut -d, -f1 | tr -d ' ')
             if [ -n "$HELLO_TPL" ]; then
               create_and_invite "$HELLO_TPL" "helloksdc-$AUTHOR"
