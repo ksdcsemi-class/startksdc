@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KSDC 수업 입장</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+         display: flex; min-height: 100vh; align-items: center; justify-content: center;
+         background: #f6f8fa; color: #1f2328; }
+  @media (prefers-color-scheme: dark) { body { background: #0d1117; color: #e6edf3; } }
+  .card { max-width: 26rem; width: 90%; padding: 2rem 1.6rem; border-radius: 12px;
+          background: #ffffff; box-shadow: 0 1px 6px rgba(0,0,0,.12); text-align: center; }
+  @media (prefers-color-scheme: dark) { .card { background: #161b22; } }
+  h1 { font-size: 1.25rem; margin: 0 0 .3rem; }
+  .course { font-size: 1.6rem; font-weight: 700; margin: .2rem 0 1.2rem; color: #1a7f37; }
+  ol { text-align: left; font-size: .95rem; line-height: 1.7; margin: 0 auto 1.4rem; padding-left: 1.4rem; }
+  .go { display: block; width: 100%; box-sizing: border-box; padding: .9rem 0;
+        background: #1f883d; color: #fff; font-size: 1.15rem; font-weight: 700;
+        border: 0; border-radius: 8px; text-decoration: none; }
+  .go:active { background: #166b2e; }
+  .hint { font-size: .8rem; margin-top: 1rem; opacity: .75; line-height: 1.5; }
+  .off { color: #d1242f; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>KSDC 수업 입장</h1>
+  <div class="course" id="course">수업을 지정하지 않았습니다</div>
+  <ol>
+    <li>아래 <b>입장하기</b>를 누릅니다 (GitHub 로그인 필요)</li>
+    <li>GitHub 화면에서 초록 <b>Create</b> 버튼을 누릅니다</li>
+    <li>잠시 뒤 달리는 안내 답글의 저장소 링크에서 <b>Accept invitation</b>을 누르면 끝입니다</li>
+  </ol>
+  <a class="go" id="go" href="#" hidden>입장하기</a>
+  <p class="hint" id="hint">GitHub 계정이 없으면 github.com에서 가입부터 합니다.<br>
+     초대 메일은 GitHub 가입 메일함으로도 발송됩니다.</p>
+</div>
+<script>
+  var a = new URLSearchParams(location.search).get("a");
+  var ok = a && /^[a-z0-9][a-z0-9-]*$/.test(a);
+  if (ok) {
+    document.getElementById("course").textContent = a;
+    var go = document.getElementById("go");
+    go.href = "https://github.com/ksdcsemi-class/startksdc/issues/new"
+            + "?template=claim.yml&title=" + encodeURIComponent("claim: " + a);
+    go.hidden = false;
+  } else {
+    document.getElementById("course").className = "course off";
+    document.getElementById("hint").textContent = "수업 QR로 다시 접속하십시오.";
+  }
+</script>
+</body>
+</html>
