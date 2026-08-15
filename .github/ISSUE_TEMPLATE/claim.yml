@@ -9,7 +9,6 @@ body:
   - type: markdown
     attributes:
       value: |
-        수업 입장 신청 화면입니다. 아무것도 쓰지 않아도 됩니다.
         접수되면 이 화면에 안내 답글이 달리고, GitHub 가입 메일함으로 저장소 초대가 발송됩니다.
   - type: checkboxes
     id: ack
