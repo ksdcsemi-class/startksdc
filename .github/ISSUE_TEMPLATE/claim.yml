@@ -14,5 +14,6 @@ body:
   - type: checkboxes
     id: ack
     attributes:
+      label: 바로 아래의 초록 Create 버튼을 누르면 접수됩니다
       options:
-        - label: 바로 아래의 초록 Create 버튼을 누르면 접수됩니다 (이 칸은 표시하지 않아도 됩니다)
+        - label: 확인했습니다 (표시하지 않아도 접수됩니다)
