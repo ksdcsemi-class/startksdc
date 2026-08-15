@@ -1,0 +1,128 @@
+# claim.yml - startksdc claim 처리 엔진 (원천)
+# 배포 위치는 startksdc(공개) .github/workflows/claim.yml이다.
+# 이슈 본문과 제목은 데이터로만 다룬다 (env 경유, 스크립트 보간 금지).
+# 로그 규율: 좌석 번호와 repo 이름 외의 학생 정보를 출력하지 않는다.
+name: claim
+
+on:
+  issues:
+    types: [opened]
+
+# 좌석 번호 부여와 ledger 기록의 경합을 직렬화한다
+concurrency:
+  group: claim-engine
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - name: claim 처리
+        env:
+          GH_TOKEN: ${{ secrets.CLASSROOM_OPS_TOKEN }}
+          ORG: ${{ github.repository_owner }}
+          ENTRY: ${{ github.event.repository.name }}
+          LEDGER: startksdc-ledger
+          NUM: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          AUTHOR: ${{ github.event.issue.user.login }}
+          NODE: ${{ github.event.issue.node_id }}
+          DELETE_DELAY_SECONDS: "300"
+        run: |
+          set -euo pipefail
+
+          reply() {
+            gh api "repos/$ORG/$ENTRY/issues/$NUM/comments" -f body="$1" --silent
+          }
+          # 무잔류: 답글 후 지연 삭제한다. 실패해도 워크플로는 성공으로 끝낸다 (예비 도구가 따라잡는다)
+          finish() {
+            sleep "$DELETE_DELAY_SECONDS"
+            gh api graphql \
+              -f query='mutation($id: ID!) { deleteIssue(input: {issueId: $id}) { clientMutationId } }' \
+              -F id="$NODE" --silent || true
+            exit 0
+          }
+          ledger_get() {
+            gh api "repos/$ORG/$LEDGER/contents/$1" --jq .content 2>/dev/null | base64 -d || true
+          }
+          ledger_put() {
+            local path="$1" body="$2" msg="$3"
+            local sha
+            sha=$(gh api "repos/$ORG/$LEDGER/contents/$path" --jq .sha 2>/dev/null || true)
+            if [ -n "$sha" ]; then
+              gh api -X PUT "repos/$ORG/$LEDGER/contents/$path" \
+                -f message="$msg" -f content="$(printf '%s' "$body" | base64 -w0)" -f sha="$sha" --silent
+            else
+              gh api -X PUT "repos/$ORG/$LEDGER/contents/$path" \
+                -f message="$msg" -f content="$(printf '%s' "$body" | base64 -w0)" --silent
+            fi
+          }
+          create_and_invite() {
+            local tpl="$1" repo="$2"
+            gh api -X POST "repos/$ORG/$tpl/generate" \
+              -f owner="$ORG" -f name="$repo" -F private=true --silent
+            gh api -X PUT "repos/$ORG/$repo/collaborators/$AUTHOR" \
+              -f permission=push --silent
+          }
+
+          # 1. 제목 검증 - claim이 아닌 이슈도 안내 후 같은 무잔류 경로로 정리한다
+          ASSIGN=$(printf '%s' "$TITLE" | sed -n 's/^claim: *\([a-z0-9][a-z0-9-]*\) *$/\1/p')
+          if [ -z "$ASSIGN" ]; then
+            reply "이 저장소는 수업 입장 신청 전용입니다. 수업 QR로 다시 접수하십시오. 이 이슈는 잠시 후 자동 정리됩니다."
+            finish
+          fi
+          echo "claim 접수: 제목 형식 통과"
+
+          # 2. 등록 확인 - 등록 목록은 비공개 ledger의 registry.cfg다
+          REGISTRY=$(ledger_get registry.cfg)
+          LINE=$(printf '%s\n' "$REGISTRY" | sed -n "s/^$ASSIGN *= *//p" | head -1)
+          if [ -z "$LINE" ]; then
+            reply "접수 대상이 아닌 신청입니다. 수업 QR로 다시 접수하십시오. 이 이슈는 잠시 후 자동 정리됩니다."
+            finish
+          fi
+          TEMPLATE=$(printf '%s' "$LINE" | cut -d, -f1 | tr -d ' ')
+          SEATS=$(printf '%s' "$LINE" | sed -n 's/.*SEATS *\([0-9][0-9]*\).*/\1/p')
+          REPO="$ASSIGN-$AUTHOR"
+
+          # 3. 중복 검사 - 이미 있으면 생성 없이 초대만 재발송한다 (멱등)
+          if gh api "repos/$ORG/$REPO" --silent 2>/dev/null; then
+            gh api -X PUT "repos/$ORG/$REPO/collaborators/$AUTHOR" -f permission=push --silent || true
+            reply "이미 접수된 신청입니다. 저장소는 https://github.com/$ORG/$REPO 이며, 초대가 필요하면 다시 발송되었습니다."
+            finish
+          fi
+
+          # 4. 정원 검사 - 성공 기록 수가 곧 점유 좌석 수다 (SEATS 0은 무제한)
+          RECORDS=$(ledger_get ledger.jsonl)
+          COUNT=$(printf '%s\n' "$RECORDS" | grep -c "\"assignment\":\"$ASSIGN\"" || true)
+          if [ "${SEATS:-0}" -gt 0 ] && [ "$COUNT" -ge "$SEATS" ]; then
+            reply "정원이 마감된 수업입니다. 담당 교수에게 문의하십시오. 이 이슈는 잠시 후 자동 정리됩니다."
+            finish
+          fi
+          SEAT=$((COUNT + 1))
+          echo "좌석 배정: $ASSIGN #$SEAT"
+
+          # 5. 생성과 초대
+          create_and_invite "$TEMPLATE" "$REPO"
+
+          # 6. 명부 자동 등재 - 과목 claim인데 helloksdc 명부가 없으면 함께 만든다
+          if [ "$ASSIGN" != "helloksdc" ] && ! gh api "repos/$ORG/helloksdc-$AUTHOR" --silent 2>/dev/null; then
+            HELLO_TPL=$(printf '%s\n' "$REGISTRY" | sed -n 's/^helloksdc *= *//p' | head -1 | cut -d, -f1 | tr -d ' ')
+            if [ -n "$HELLO_TPL" ]; then
+              create_and_invite "$HELLO_TPL" "helloksdc-$AUTHOR"
+              NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+              RECORDS="$RECORDS"$'\n'"{\"ts\":\"$NOW\",\"assignment\":\"helloksdc\",\"seat\":0,\"user\":\"$AUTHOR\"}"
+              echo "명부 자동 등재 수행"
+            fi
+          fi
+
+          # 7. 사건 기록 - 비공개 ledger에 적는다
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RECORDS="$RECORDS"$'\n'"{\"ts\":\"$NOW\",\"assignment\":\"$ASSIGN\",\"seat\":$SEAT,\"user\":\"$AUTHOR\"}"
+          RECORDS=$(printf '%s\n' "$RECORDS" | sed '/^$/d')
+          ledger_put ledger.jsonl "$RECORDS" "claim: $ASSIGN #$SEAT"
+
+          # 8. 안내 답글과 무잔류 정리
+          reply "접수 완료. 좌석은 $ASSIGN #$SEAT 입니다. 저장소 https://github.com/$ORG/$REPO 를 열어 초대를 수락하십시오. 같은 안내가 GitHub 가입 메일로도 발송되었습니다. 이 이슈는 잠시 후 자동 정리됩니다."
+          finish
