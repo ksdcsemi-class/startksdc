@@ -11,7 +11,7 @@ body:
   - type: checkboxes
     id: ack
     attributes:
-      label: 아래 초록 Create 버튼을 누르면 "poctest 수업" 신청이 접수됩니다
-      description: 누른 후에는 아래에 답글이 생길 때까지 기다리면 됩니다
+      label: '"poctest 수업" 신청입니다. 접수되면 아래에 답글이 달립니다. 답글이 생길 때까지 기다리면 됩니다'
+      description: 아래 초록 Create 버튼을 누르면 접수됩니다
       options:
         - label: 확인 (선택)
