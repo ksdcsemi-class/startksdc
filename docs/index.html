@@ -16,10 +16,12 @@
   h1 { font-size: 1.25rem; margin: 0 0 .3rem; }
   .course { font-size: 1.6rem; font-weight: 700; margin: .2rem 0 1.2rem; color: #1a7f37; }
   ol { text-align: left; font-size: .95rem; line-height: 1.7; margin: 0 auto 1.4rem; padding-left: 1.4rem; }
+  ol.after { margin: 1.2rem auto 0; }
+  .after-title { font-size: .9rem; font-weight: 700; margin: 1.4rem 0 0; text-align: left; opacity: .85; }
   .go { display: block; width: 100%; box-sizing: border-box; padding: .9rem 0;
-        background: #1f883d; color: #fff; font-size: 1.15rem; font-weight: 700;
+        background: #0969da; color: #fff; font-size: 1.15rem; font-weight: 700;
         border: 0; border-radius: 8px; text-decoration: none; }
-  .go:active { background: #166b2e; }
+  .go:active { background: #0550ae; }
   .hint { font-size: .8rem; margin-top: 1rem; opacity: .75; line-height: 1.5; }
   .off { color: #d1242f; font-weight: 600; }
 </style>
@@ -30,11 +32,14 @@
   <div class="course" id="course">수업을 지정하지 않았습니다</div>
   <ol>
     <li><b>github.com에 로그인</b>합니다 (계정이 없으면 <a href="https://github.com/signup" target="_blank">가입하기</a>부터)</li>
-    <li>아래 <b>입장하기</b>를 누르면 GitHub 신청 화면이 열립니다</li>
-    <li>그 화면에서 초록 <b>Create</b> 버튼을 눌러 신청을 제출합니다</li>
-    <li>잠시 뒤 달리는 안내 답글의 저장소 링크에서 <b>Accept invitation</b>을 누르면 끝입니다</li>
+    <li>아래 <b>파란 입장하기</b>를 누르면 GitHub 신청 화면이 열립니다</li>
   </ol>
   <a class="go" id="go" href="#" hidden>입장하기</a>
+  <p class="after-title">누른 다음에는</p>
+  <ol class="after" start="3">
+    <li>GitHub 화면에서 <b>초록 Create</b> 버튼을 눌러 신청을 제출합니다</li>
+    <li>잠시 뒤 달리는 안내 답글의 저장소 링크에서 <b>Accept invitation</b>을 누르면 끝입니다</li>
+  </ol>
   <p class="hint" id="hint">초대 메일은 GitHub 가입 메일함으로도 발송됩니다.</p>
 </div>
 <script>
