@@ -124,5 +124,5 @@ jobs:
           ledger_put ledger.jsonl "$RECORDS" "claim: $ASSIGN #$SEAT"
 
           # 8. 안내 답글과 무잔류 정리 — 결과와 다음 한 걸음만 말한다 (#N 표기는 이슈 링크로 오렌더링되므로 금지)
-          reply "**$ASSIGN ${SEAT}번 좌석으로 접수되었습니다.**"$'\n'"저장소를 열어 **Accept invitation**을 누르십시오 → https://github.com/$ORG/$REPO"
+          reply "접수 완료."$'\n'"**$ASSIGN ${SEAT}번 좌석입니다.**"$'\n'"저장소를 열어 **Accept invitation**을 누르십시오 → https://github.com/$ORG/$REPO"
           finish
