@@ -1,8 +1,11 @@
 # claim.yml - startksdc claim 처리 엔진 (원천)
 # 배포 위치는 startksdc(공개) .github/workflows/claim.yml이다.
 # 이슈 본문과 제목은 데이터로만 다룬다 (env 경유, 스크립트 보간 금지).
-# 로그 규율: 좌석 번호와 repo 이름 외의 학생 정보를 출력하지 않는다.
-# 구조: process(직렬 — 좌석·장부 경합 차단)와 cleanup(병렬 — 지연 삭제)을 분리한다.
+# 로그 규율: repo 이름 외의 학생 정보를 출력하지 않는다.
+# 판정 원천: registry.cfg(등재·정원)와 repo 실물뿐이다 — 장부(ledger.jsonl)·좌석 번호·
+#   명부 자동 등재(helloksdc)는 A단계 재배선으로 퇴역했다 (2026-08-18, learn-enrollment-design).
+#   신원·키는 KSDC Learn 명부가 정본이고, 상세 안내는 provisioning 후 Learn 메일이 담당한다.
+# 구조: process(직렬 — 생성 경합 차단)와 cleanup(병렬 — 지연 삭제)을 분리한다.
 #   삭제 대기가 직렬 구간을 점유하면 처리량이 1건/5분으로 떨어지기 때문이다 (2026-08-15 실측).
 name: claim
 
@@ -27,7 +30,7 @@ jobs:
           GH_TOKEN: ${{ secrets.CLASSROOM_OPS_TOKEN }}
           ORG: ${{ github.repository_owner }}
           ENTRY: ${{ github.event.repository.name }}
-          LEDGER: startksdc-ledger
+          REGISTRY_REPO: startksdc-ledger
           NUM: ${{ github.event.issue.number }}
           TITLE: ${{ github.event.issue.title }}
           AUTHOR: ${{ github.event.issue.user.login }}
@@ -43,20 +46,8 @@ jobs:
             echo "node=$NODE" >> "$GITHUB_OUTPUT"
             exit 0
           }
-          ledger_get() {
-            gh api "repos/$ORG/$LEDGER/contents/$1" --jq .content 2>/dev/null | base64 -d || true
-          }
-          ledger_put() {
-            local path="$1" body="$2" msg="$3"
-            local sha
-            sha=$(gh api "repos/$ORG/$LEDGER/contents/$path" --jq .sha 2>/dev/null || true)
-            if [ -n "$sha" ]; then
-              gh api -X PUT "repos/$ORG/$LEDGER/contents/$path" \
-                -f message="$msg" -f content="$(printf '%s' "$body" | base64 -w0)" -f sha="$sha" --silent
-            else
-              gh api -X PUT "repos/$ORG/$LEDGER/contents/$path" \
-                -f message="$msg" -f content="$(printf '%s' "$body" | base64 -w0)" --silent
-            fi
+          registry_get() {
+            gh api "repos/$ORG/$REGISTRY_REPO/contents/registry.cfg" --jq .content 2>/dev/null | base64 -d || true
           }
           create_and_invite() {
             local tpl="$1" repo="$2"
@@ -74,8 +65,8 @@ jobs:
           fi
           echo "claim 접수: 제목 형식 통과"
 
-          # 2. 등록 확인 - 등록 목록은 비공개 ledger의 registry.cfg다
-          REGISTRY=$(ledger_get registry.cfg)
+          # 2. 등록 확인 - 등록 목록은 registry.cfg다
+          REGISTRY=$(registry_get)
           LINE=$(printf '%s\n' "$REGISTRY" | sed -n "s/^$ASSIGN *= *//p" | head -1)
           if [ -z "$LINE" ]; then
             reply "접수 대상이 아닌 신청입니다."$'\n'"수업 QR로 다시 접수하십시오."
@@ -83,8 +74,6 @@ jobs:
           fi
           TEMPLATE=$(printf '%s' "$LINE" | cut -d, -f1 | tr -d ' ')
           SEATS=$(printf '%s' "$LINE" | sed -n 's/.*SEATS *\([0-9][0-9]*\).*/\1/p')
-          # HELLO 스위치 - 실습형은 on(기본, 명부 자동 등재), 창구형은 off (과목 repo userinfo로 완결)
-          HELLO=$(printf '%s' "$LINE" | sed -n 's/.*HELLO *\(on\|off\).*/\1/p')
           REPO="$ASSIGN-$AUTHOR"
 
           # 3. 중복 검사 - 이미 있으면 생성 없이 초대만 재발송한다 (멱등)
@@ -94,38 +83,21 @@ jobs:
             finish
           fi
 
-          # 4. 정원 검사 - 성공 기록 수가 곧 점유 좌석 수다 (SEATS 0은 무제한)
-          RECORDS=$(ledger_get ledger.jsonl)
-          COUNT=$(printf '%s\n' "$RECORDS" | grep -c "\"assignment\":\"$ASSIGN\"" || true)
-          if [ "${SEATS:-0}" -gt 0 ] && [ "$COUNT" -ge "$SEATS" ]; then
-            reply "정원이 마감된 수업입니다."$'\n'"담당 교수에게 문의하십시오."
-            finish
+          # 4. 정원 검사 - 점유 수는 repo 실물 수다 (SEATS 0은 무제한, template 사본 제외)
+          if [ "${SEATS:-0}" -gt 0 ]; then
+            COUNT=$(gh repo list "$ORG" --limit 1000 --json name --jq '.[].name' \
+              | grep "^$ASSIGN-" | grep -vc "template" || true)
+            if [ "$COUNT" -ge "$SEATS" ]; then
+              reply "정원이 마감된 수업입니다."$'\n'"담당 교수에게 문의하십시오."
+              finish
+            fi
           fi
-          SEAT=$((COUNT + 1))
-          echo "좌석 배정: $ASSIGN $SEAT"
 
           # 5. 생성과 초대
           create_and_invite "$TEMPLATE" "$REPO"
 
-          # 6. 명부 자동 등재 - 실습형 과목 claim인데 helloksdc 명부가 없으면 함께 만든다 (HELLO off는 건너뜀)
-          if [ "$ASSIGN" != "helloksdc" ] && [ "$HELLO" != "off" ] && ! gh api "repos/$ORG/helloksdc-$AUTHOR" --silent 2>/dev/null; then
-            HELLO_TPL=$(printf '%s\n' "$REGISTRY" | sed -n 's/^helloksdc *= *//p' | head -1 | cut -d, -f1 | tr -d ' ')
-            if [ -n "$HELLO_TPL" ]; then
-              create_and_invite "$HELLO_TPL" "helloksdc-$AUTHOR"
-              NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-              RECORDS="$RECORDS"$'\n'"{\"ts\":\"$NOW\",\"assignment\":\"helloksdc\",\"seat\":0,\"user\":\"$AUTHOR\"}"
-              echo "명부 자동 등재 수행"
-            fi
-          fi
-
-          # 7. 사건 기록 - 비공개 ledger에 적는다
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RECORDS="$RECORDS"$'\n'"{\"ts\":\"$NOW\",\"assignment\":\"$ASSIGN\",\"seat\":$SEAT,\"user\":\"$AUTHOR\"}"
-          RECORDS=$(printf '%s\n' "$RECORDS" | sed '/^$/d')
-          ledger_put ledger.jsonl "$RECORDS" "claim: $ASSIGN seat $SEAT"
-
-          # 8. 안내 답글 - 결과와 다음 한 걸음만 말한다 (#N 표기는 이슈 링크로 오렌더링되므로 금지)
-          reply "접수 완료."$'\n'"**$ASSIGN ${SEAT}번 좌석입니다.**"$'\n'"아래의 저장소를 열어 녹색 버튼 **Accept invitation**을 누르십시오."$'\n'"https://github.com/$ORG/$REPO"
+          # 6. 안내 답글 - 결과와 다음 한 걸음만 말한다 (#N 표기는 이슈 링크로 오렌더링되므로 금지)
+          reply "접수 완료."$'\n'"아래의 저장소를 열어 녹색 버튼 **Accept invitation**을 누르십시오."$'\n'"https://github.com/$ORG/$REPO"$'\n'"수업 상세 안내는 KSDC Learn(learn.ksdcsemi.com) 가입 이메일로 발송됩니다."
           finish
 
   cleanup:
