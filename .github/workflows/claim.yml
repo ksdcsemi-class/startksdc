@@ -63,6 +63,10 @@ jobs:
             reply "이 저장소는 수업 입장 신청 전용입니다."$'\n'"수업 QR로 다시 접수하십시오."
             finish
           fi
+          # 2026B 과목명 전환 — 이미 배포된 old URL과 직접 issue 링크도 새 repo 이름으로 정규화한다.
+          if [ "$ASSIGN" = "semiconintro-dyc2026b-kyu" ]; then
+            ASSIGN="semiconai2026b-kyu"
+          fi
           echo "claim 접수: 제목 형식 통과"
 
           # 2. 등록 확인 - 등록 목록은 registry.cfg다

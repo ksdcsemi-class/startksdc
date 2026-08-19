@@ -43,6 +43,10 @@
 </div>
 <script>
   var a = new URLSearchParams(location.search).get("a");
+  var aliases = {
+    "semiconintro-dyc2026b-kyu": "semiconai2026b-kyu"
+  };
+  a = aliases[a] || a;
   var ok = a && /^[a-z0-9][a-z0-9-]*$/.test(a);
   if (ok) {
     document.getElementById("course").textContent = a;
