@@ -1,6 +1,6 @@
 # compatibility alias — 기존 2026B URL은 semiconai2026b-kyu 신청으로 정규화한다.
-name: semiconai2026b-kyu 수업 입장 신청
-description: 수업 QR로 들어온 입장 신청입니다
+name: semiconai2026b-kyu 수업 입장 신청 (기존 URL)
+description: 기존 2026B QR을 새 과목 ID로 연결하는 신청입니다
 title: "claim: semiconai2026b-kyu"
 body:
   - type: checkboxes
